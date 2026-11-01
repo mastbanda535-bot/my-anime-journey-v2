@@ -3,6 +3,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AnimeCalendar from "./calendar";
+import AuthScreen from "../components/AuthScreen";
+import { supabase } from "../lib/supabase";
+import { signOut } from "../lib/auth";
+import { collectLocalData } from "../lib/cloudSync";
 
 const API = "https://jikan.lucashdo.com/v1";
 
@@ -126,6 +130,19 @@ function normalizeAnime(item) {
 }
 
 export default function Home() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setCurrentUser(session?.user ?? null);
+        setAuthLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
   const [activeTab, setActiveTab] = useState("Home");
   const [theme, setTheme] = useState("dark");
   const [themeReady, setThemeReady] = useState(false);
@@ -149,6 +166,8 @@ const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [favourites, setFavourites] = useState([]);
   const [progress, setProgress] = useState({});
   const [storageReady, setStorageReady] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [cloudError, setCloudError] = useState("");
 
   const [recommendations, setRecommendations] = useState([]);
   const [recommendLoading, setRecommendLoading] = useState(false);
@@ -251,8 +270,64 @@ if (savedCharacters) {
     }
   }, []);
 
+  // Load the user's cloud data only after local storage has finished loading.
   useEffect(() => {
-    if (!storageReady) return;
+    if (!currentUser || !storageReady) return;
+
+    let cancelled = false;
+
+    async function loadCloudData() {
+      setCloudReady(false);
+      setCloudError("");
+
+      try {
+        const { data, error } = await supabase
+          .from("user_data")
+          .select("*")
+          .eq("id", currentUser.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (cancelled) return;
+
+        if (data) {
+          setWatchlist(Array.isArray(data.watchlist) ? data.watchlist.map(normalizeAnime).filter(Boolean) : []);
+          setFavourites(Array.isArray(data.favourites) ? data.favourites.map(normalizeAnime).filter(Boolean) : []);
+          setProgress(data.progress && typeof data.progress === "object" ? data.progress : {});
+          setMyReviews(Array.isArray(data.reviews) ? data.reviews : []);
+          setCharacterPerspectives(Array.isArray(data.characters) ? data.characters : []);
+          setWallpapers(Array.isArray(data.wallpapers) ? data.wallpapers : []);
+          setFavouriteWallpapers(Array.isArray(data.wallpaper_favourites) ? data.wallpaper_favourites : []);
+          setCustomBackground(data.custom_background || "");
+          setTheme(data.theme && ANIME_THEMES[data.theme] ? data.theme : "dark");
+        } else {
+          const localData = collectLocalData();
+
+          const { error: insertError } = await supabase
+            .from("user_data")
+            .insert({
+              id: currentUser.id,
+              ...localData
+            });
+
+          if (insertError) throw insertError;
+        }
+
+        if (!cancelled) setCloudReady(true);
+      } catch (err) {
+        console.error("Cloud data loading failed:", err);
+        if (!cancelled) setCloudError(err.message || "Could not load cloud data.");
+      }
+    }
+
+    loadCloudData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, storageReady]);
+  useEffect(() => {
+    if (!storageReady || !cloudReady) return;
 
     try {
       localStorage.setItem(STORAGE_KEYS.watchlist, JSON.stringify(watchlist));
@@ -272,9 +347,10 @@ localStorage.setItem("my-anime-custom-background", customBackground);
   favouriteWallpapers,
   customBackground,
   storageReady,
+  cloudReady,
 ]);
   useEffect(() => {
-  if (!storageReady) return;
+  if (!storageReady || !cloudReady) return;
 
   try {
     localStorage.setItem(
@@ -289,7 +365,7 @@ localStorage.setItem("my-anime-custom-background", customBackground);
   } catch (err) {
     console.error("Could not save reviews and characters:", err);
   }
-}, [myReviews, characterPerspectives, storageReady]);
+}, [myReviews, characterPerspectives, storageReady, cloudReady]);
    useEffect(() => {
   try {
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
@@ -305,7 +381,7 @@ localStorage.setItem("my-anime-custom-background", customBackground);
 }, []);
 
   useEffect(() => {
-  if (!themeReady) return;
+  if (!themeReady || !cloudReady) return;
 
   try {
     if (ANIME_THEMES[theme]) {
@@ -314,7 +390,54 @@ localStorage.setItem("my-anime-custom-background", customBackground);
   } catch (err) {
     console.error("Could not save anime theme:", err);
   }
-}, [theme, themeReady]);
+}, [theme, themeReady, cloudReady]);
+  // Automatically save changes to the signed-in user's cloud account.
+  useEffect(() => {
+    if (!currentUser || !cloudReady) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const payload = {
+          id: currentUser.id,
+          watchlist,
+          favourites,
+          progress,
+          reviews: myReviews,
+          characters: characterPerspectives,
+          wallpapers,
+          wallpaper_favourites: favouriteWallpapers,
+          custom_background: customBackground,
+          theme,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error } = await supabase
+          .from("user_data")
+          .upsert(payload, { onConflict: "id" });
+
+        if (error) throw error;
+
+        setCloudError("");
+      } catch (err) {
+        console.error("Cloud save failed:", err);
+        setCloudError(err.message || "Could not save cloud data.");
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [
+    currentUser,
+    cloudReady,
+    watchlist,
+    favourites,
+    progress,
+    myReviews,
+    characterPerspectives,
+    wallpapers,
+    favouriteWallpapers,
+    customBackground,
+    theme,
+  ]);
   async function fetchAnime(searchTerm) {
     const response = await fetch(
       `${API}/anime?q=${encodeURIComponent(searchTerm)}`
@@ -992,10 +1115,10 @@ function renderMyReviews() {
         )}
       </div>
 
-      <div className="anime-grid">
+      <div className="anime-grid review-grid">
         {myReviews.map((item) => (
           <article
-  className="anime-card expandable-card"
+  className="anime-card expandable-card review-card"
   key={item.id}
   onClick={() => setExpandedCard({ type: "review", item })}
   role="button"
@@ -1009,7 +1132,7 @@ function renderMyReviews() {
               )}
               <h2>{item.name}</h2>
               <p>⭐ {item.rating}/5</p>
-              <p>{item.review}</p>
+              <p className="review-preview">{item.review}</p>
               <small>{item.date}</small>
 
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "14px" }}>
@@ -1043,14 +1166,7 @@ function renderMyReviews() {
   >
     <div
       className="expanded-card-modal"
-      onClick={(event) => {
-  event.stopPropagation();
-  setDeleteConfirmation({
-    type: "character",
-    id: item.id,
-    name: item.name
-  });
-}}
+      onClick={(event) => event.stopPropagation()}
     >
       <button
         className="expanded-card-close"
@@ -1179,7 +1295,7 @@ function renderCharacterUniverse() {
         )}
       </div>
 
-      <div className="anime-grid">
+      <div className="anime-grid review-grid">
         {characterPerspectives.map((item) => (
           <article
   className="anime-card expandable-card"
@@ -1825,6 +1941,18 @@ function renderAnimeThemes() {
     );
   }
 
+  if (authLoading) {
+    return (
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#090914", color: "#fff" }}>
+        Checking your account...
+      </main>
+    );
+  }
+
+  if (!currentUser) {
+    return <AuthScreen />;
+  }
+
   return (
     <main className="anime-app">
       <aside className="sidebar">
@@ -1850,6 +1978,16 @@ function renderAnimeThemes() {
         <div className="profile">
           <div className="avatar">å›</div><div><strong>Anime Explorer</strong><p>Dreamer of worlds</p></div>
         </div>
+        <button
+          type="button"
+          onClick={async () => {
+            const { error } = await signOut();
+            if (error) alert(error.message);
+          }}
+          style={{ margin: "12px 20px", padding: "10px", borderRadius: 7, border: "1px solid #8062a8", background: "transparent", color: "#fff", cursor: "pointer" }}
+        >
+          Log Out
+        </button>
       </aside>
 
       <section className="main-content">
@@ -1908,7 +2046,9 @@ function renderAnimeThemes() {
             {loading && <p className="status-message">Loading anime universe... âœ¨</p>}
             {error && <div className="status-message error-message"><p>{error}</p><button className="secondary-button" onClick={() => loadAnime(query || "Naruto")}>Try Again â†»</button></div>}
             {selectedAnime && renderDetail("library")}
-            {!loading && !error && !selectedAnime && <div className="anime-grid">{anime.map((item) => renderAnimeCard(item))}</div>}
+            {!loading && !error && !selectedAnime && <div className="anime-grid">
+  {anime.map((item) => renderAnimeCard(item))}
+</div>}
           </section>
         )}
 
@@ -1946,6 +2086,17 @@ function renderAnimeThemes() {
     </main>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 

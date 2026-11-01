@@ -2310,3 +2310,181 @@ html[data-custom-background="true"] body {
   background-attachment: fixed !important;
   background-repeat: no-repeat !important;
 }
+/* ================================
+   ANIME REVIEW SQUARE CARDS
+================================ */
+
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 22px;
+  align-items: stretch;
+}
+
+.review-card {
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.review-card .anime-card-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.review-card .anime-card-content > img {
+  height: 125px !important;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.review-card h2 {
+  flex-shrink: 0;
+  margin: 5px 0;
+}
+
+.review-card .review-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  flex: 1;
+}
+
+.review-card small {
+  flex-shrink: 0;
+}
+
+.review-card .anime-card-content > div {
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .review-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .review-card .anime-card-content {
+    padding: 10px;
+  }
+}
+/* SQUARE CARDS - ANIME LIBRARY ONLY */
+
+.anime-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 22px;
+  align-items: stretch;
+}
+
+.anime-library-grid .anime-card-wrap {
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.anime-library-grid .anime-card {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.anime-library-grid .poster-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.anime-library-grid .poster-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.anime-library-grid .anime-card-info {
+  flex-shrink: 0;
+}
+
+.anime-library-grid .card-actions,
+.anime-library-grid .card-status {
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .anime-library-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+/* MY REVIEWS - SQUARE CARDS */
+
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+
+.review-card {
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.review-card .anime-card-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.review-card .anime-card-content > img {
+  height: 115px !important;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.review-card h2,
+.review-card small {
+  flex-shrink: 0;
+}
+
+.review-card .review-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  flex: 1;
+}
+
+.review-card .anime-card-content > div {
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .review-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .review-card .anime-card-content {
+    padding: 10px;
+  }
+}
